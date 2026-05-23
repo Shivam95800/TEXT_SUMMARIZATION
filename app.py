@@ -51,6 +51,8 @@ def summarize_dialogue(dialogue: str) -> str:
     # AI ko instruction dena zaroori hai
     input_text = "summarize: " + dialogue
 
+ # Baki upar ka code same rahega...
+
     # Tokenize
     inputs = tokenizer(
         input_text,
@@ -60,14 +62,14 @@ def summarize_dialogue(dialogue: str) -> str:
         return_tensors="pt"
     ).to(device)
 
-    # Generate the summary token ids
-   # Memory optimize kiya hua code
-    targets = model.generate(
-        input_ids=inputs["input_ids"],
-        attention_mask=inputs["attention_mask"],
-        max_length=150,
-        early_stopping=True
-    )
+    with torch.no_grad(): 
+        targets = model.generate(
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
+            max_length=150,
+            early_stopping=True
+        )
+    # -----------------------------
     
     # Decode the output
     summary = tokenizer.decode(targets[0], skip_special_tokens=True)
