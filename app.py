@@ -9,12 +9,11 @@ from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Text Summarizer App", description="Text Summarization using T5", version="1.0")
 
-# model = T5ForConditionalGeneration.from_pretrained("./Saved_Summarizer_Model")
-# tokenizer = T5Tokenizer.from_pretrained("./Saved_Summarizer_Model")
+# --- Model Variables Initialized to None ---
+model = None
+tokenizer = None
 
-model = T5ForConditionalGeneration.from_pretrained("./Saved_Summarizer_Model")
-tokenizer = T5Tokenizer.from_pretrained("./Saved_Summarizer_Model", legacy=False)
-# device
+# --- Device Configuration ---
 if torch.backends.mps.is_available():
     device = torch.device("mps")
 elif torch.cuda.is_available():
@@ -22,47 +21,20 @@ elif torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
-model.to(device)
-
 templates = Jinja2Templates(directory=".")
-
-
 
 class DialogueInput(BaseModel):
     dialogue: str
 
-# def clean_data(text):
-#     text = re.sub(r"\r\n", " ", text) # lines
-#     text = re.sub(r"\s+", " ", text) # spaces
-#     text = re.sub(r"<.*?>", " ", text) # html tags <p> <h1>
-#     text = text.strip().lower()
-#     return text
-
-# def summarize_dialogue(dialogue : str) -> str:
-#     dialogue = clean_data(dialogue) # clean
-
-#     # tokenize
-#     inputs = tokenizer(
-#         dialogue,
-#         padding="max_length",
-#         max_length=512,
-#         truncation=True,
-#         return_tensors="pt"
-#     ).to(device)
-
-#     # generate the summary => token ids
-#     model.to(device)
-#     targets = model.generate(
-#         input_ids=inputs["input_ids"],
-#         attention_mask=inputs["attention_mask"],
-#         max_length=150,
-#         num_beams=4,
-#         early_stopping=True
-#     )
-    
-#     # decoded our output
-#     summary = tokenizer.decode(targets[0], skip_special_tokens=True) # EOS, SEP
-#     return summary
+# --- Lazy Loading Function ---
+def load_ai_model():
+    global model, tokenizer
+    if model is None or tokenizer is None:
+        print("Downloading & Loading Model... First request mein thoda time lagega.")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small", legacy=False)
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        model.to(device)
+        print("Model Loaded Successfully!")
 
 def clean_data(text):
     # HTML tags hatayenge, lekin Capital letters aur New Lines nahi
@@ -71,6 +43,9 @@ def clean_data(text):
     return text
 
 def summarize_dialogue(dialogue: str) -> str:
+    # API hit hone par sabse pehle model load hoga (agar pehle se nahi hai toh)
+    load_ai_model()
+    
     dialogue = clean_data(dialogue)
     
     # AI ko instruction dena zaroori hai
@@ -104,10 +79,6 @@ def summarize_dialogue(dialogue: str) -> str:
 async def summarize(dialogue_input: DialogueInput):
     summary = summarize_dialogue(dialogue_input.dialogue)
     return {"summary": summary}
-
-# @app.get("/", response_class=HTMLResponse)
-# async def home(request: Request):
-#     return templates.TemplateResponse("index.html", {"request": request})
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
