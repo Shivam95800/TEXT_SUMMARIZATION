@@ -1,5 +1,8 @@
+--extra-index-url https://download.pytorch.org/whl/cpu
 fastapi
 uvicorn
 torch
-gunicorn
+transformers
+jinja2
+sentencepiece
 
