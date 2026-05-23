@@ -61,12 +61,11 @@ def summarize_dialogue(dialogue: str) -> str:
     ).to(device)
 
     # Generate the summary token ids
+   # Memory optimize kiya hua code
     targets = model.generate(
         input_ids=inputs["input_ids"],
         attention_mask=inputs["attention_mask"],
         max_length=150,
-        num_beams=4,
-        length_penalty=2.0, # Yeh achi aur detailed summary banane mein madad karega
         early_stopping=True
     )
     
