@@ -1,15 +1,13 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
 from transformers import T5ForConditionalGeneration, T5Tokenizer
 import torch
 import re 
-from fastapi.templating import Jinja2Templates # UI
+from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
-from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title="Text Summarizer App", description="Text Summarization using T5", version="1.0")
-
-# --- Model Variables Initialized to None ---
+# --- Model Variables ---
 model = None
 tokenizer = None
 
@@ -21,39 +19,41 @@ elif torch.cuda.is_available():
 else:
     device = torch.device("cpu")
 
+# --- Model Load Function ---
+def load_ai_model():
+    global model, tokenizer
+    if model is None or tokenizer is None:
+        print("Loading Model...")
+        tokenizer = T5Tokenizer.from_pretrained("t5-small", legacy=False, cache_dir="/tmp/model_cache")
+        model = T5ForConditionalGeneration.from_pretrained("t5-small", cache_dir="/tmp/model_cache")
+        model.to(device)
+        print("Model Loaded Successfully!")
+
+# --- Startup: Server start hote hi model load hoga ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    load_ai_model()
+    yield
+
+# --- App ---
+app = FastAPI(title="Text Summarizer App", description="Text Summarization using T5", version="1.0", lifespan=lifespan)
+
 templates = Jinja2Templates(directory=".")
 
 class DialogueInput(BaseModel):
     dialogue: str
 
-# --- Lazy Loading Function ---
-def load_ai_model():
-    global model, tokenizer
-    if model is None or tokenizer is None:
-        print("Downloading & Loading Model... First request mein thoda time lagega.")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small", legacy=False)
-        model = T5ForConditionalGeneration.from_pretrained("t5-small")
-        model.to(device)
-        print("Model Loaded Successfully!")
-
+# --- Clean Text ---
 def clean_data(text):
-    # HTML tags hatayenge, lekin Capital letters aur New Lines nahi
-    text = re.sub(r"<.*?>", " ", text) 
+    text = re.sub(r"<.*?>", " ", text)
     text = text.strip()
     return text
 
+# --- Summarize Logic ---
 def summarize_dialogue(dialogue: str) -> str:
-    # API hit hone par sabse pehle model load hoga (agar pehle se nahi hai toh)
-    load_ai_model()
-    
     dialogue = clean_data(dialogue)
-    
-    # AI ko instruction dena zaroori hai
     input_text = "summarize: " + dialogue
 
- # Baki upar ka code same rahega...
-
-    # Tokenize
     inputs = tokenizer(
         input_text,
         padding="max_length",
@@ -62,20 +62,18 @@ def summarize_dialogue(dialogue: str) -> str:
         return_tensors="pt"
     ).to(device)
 
-    with torch.no_grad(): 
+    with torch.no_grad():
         targets = model.generate(
             input_ids=inputs["input_ids"],
             attention_mask=inputs["attention_mask"],
             max_length=150,
             early_stopping=True
         )
-    # -----------------------------
-    
-    # Decode the output
+
     summary = tokenizer.decode(targets[0], skip_special_tokens=True)
     return summary
 
-# API endpoints
+# --- API Endpoints ---
 @app.post("/summarize/")
 async def summarize(dialogue_input: DialogueInput):
     summary = summarize_dialogue(dialogue_input.dialogue)
