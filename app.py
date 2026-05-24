@@ -1,43 +1,8 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from pydantic import BaseModel
-from transformers import T5ForConditionalGeneration, T5Tokenizer
-import torch
-import re 
-from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse
-
-# --- Model Variables ---
-model = None
-tokenizer = None
-
-# --- Device Configuration ---
-if torch.backends.mps.is_available():
-    device = torch.device("mps")
-elif torch.cuda.is_available():
-    device = torch.device("cuda")
-else:
-    device = torch.device("cpu")
-
-# --- Model Load Function ---
-def load_ai_model():
-    global model, tokenizer
-    if model is None or tokenizer is None:
-        print("Loading Model...")
-        tokenizer = T5Tokenizer.from_pretrained("t5-small", legacy=False, cache_dir="/tmp/model_cache")
-        model = T5ForConditionalGeneration.from_pretrained("t5-small", cache_dir="/tmp/model_cache")
-        model.to(device)
-        print("Model Loaded Successfully!")
-
-# --- Startup: Server start hote hi model load hoga ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    load_ai_model()
-    yield
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
-from pydantic import BaseModel
-import anthropic
+from groq import Groq
+import os
 import re
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse
@@ -47,10 +12,11 @@ client = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global client
-    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY env variable se automatically lega
+    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+    print("Groq Client Ready!")
     yield
 
-app = FastAPI(title="Text Summarizer App", description="Text Summarization using Claude", version="1.0", lifespan=lifespan)
+app = FastAPI(title="Text Summarizer App", description="Text Summarization using Groq", version="1.0", lifespan=lifespan)
 
 templates = Jinja2Templates(directory=".")
 
@@ -65,17 +31,17 @@ def clean_data(text):
 def summarize_dialogue(dialogue: str) -> str:
     dialogue = clean_data(dialogue)
     
-    message = client.messages.create(
-        model="claude-haiku-4-5-20251001",  # Sabse fast & cheap model
-        max_tokens=300,
+    response = client.chat.completions.create(
+        model="llama3-8b-8192",
         messages=[
             {
                 "role": "user",
-                "content": f"Please summarize the following text in 2-3 sentences:\n\n{dialogue}"
+                "content": f"Summarize the following text in 2-3 sentences. Only return the summary, nothing else:\n\n{dialogue}"
             }
-        ]
+        ],
+        max_tokens=300
     )
-    return message.content[0].text
+    return response.choices[0].message.content
 
 @app.post("/summarize/")
 async def summarize(dialogue_input: DialogueInput):
