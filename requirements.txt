@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-anthropic
+groq
 jinja2
 python-multipart
-
