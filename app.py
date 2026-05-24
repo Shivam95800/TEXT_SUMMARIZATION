@@ -34,46 +34,49 @@ def load_ai_model():
 async def lifespan(app: FastAPI):
     load_ai_model()
     yield
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, Request
+from pydantic import BaseModel
+import anthropic
+import re
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse
 
-# --- App ---
-app = FastAPI(title="Text Summarizer App", description="Text Summarization using T5", version="1.0", lifespan=lifespan)
+client = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global client
+    client = anthropic.Anthropic()  # ANTHROPIC_API_KEY env variable se automatically lega
+    yield
+
+app = FastAPI(title="Text Summarizer App", description="Text Summarization using Claude", version="1.0", lifespan=lifespan)
 
 templates = Jinja2Templates(directory=".")
 
 class DialogueInput(BaseModel):
     dialogue: str
 
-# --- Clean Text ---
 def clean_data(text):
     text = re.sub(r"<.*?>", " ", text)
     text = text.strip()
     return text
 
-# --- Summarize Logic ---
 def summarize_dialogue(dialogue: str) -> str:
     dialogue = clean_data(dialogue)
-    input_text = "summarize: " + dialogue
+    
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",  # Sabse fast & cheap model
+        max_tokens=300,
+        messages=[
+            {
+                "role": "user",
+                "content": f"Please summarize the following text in 2-3 sentences:\n\n{dialogue}"
+            }
+        ]
+    )
+    return message.content[0].text
 
-    inputs = tokenizer(
-        input_text,
-        padding="max_length",
-        max_length=512,
-        truncation=True,
-        return_tensors="pt"
-    ).to(device)
-
-    with torch.no_grad():
-        targets = model.generate(
-            input_ids=inputs["input_ids"],
-            attention_mask=inputs["attention_mask"],
-            max_length=150,
-            early_stopping=True
-        )
-
-    summary = tokenizer.decode(targets[0], skip_special_tokens=True)
-    return summary
-
-# --- API Endpoints ---
 @app.post("/summarize/")
 async def summarize(dialogue_input: DialogueInput):
     summary = summarize_dialogue(dialogue_input.dialogue)
